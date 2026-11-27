@@ -32,11 +32,11 @@ class WelfareLabStack(Stack):
             handler="handler.handler",
             code=_lambda.Code.from_asset("lambda"),
             log_group=log_group,
-            environment={"TABLE_NAME": table.table_name, "STAGE": stage},
+            environment={"TABLE_NAME": table.table_name, "STAGE": stage, "VERSION": "2"},
         )
 
         table.grant_read_write_data(fn)
-        environment={"TABLE_NAME": table.table_name, "STAGE": stage, "VERSION": "2"}
         
+
         api = apigw.LambdaRestApi(self, "Api", handler=fn)
         CfnOutput(self, "ApiUrl", value=api.url)

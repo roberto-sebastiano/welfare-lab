@@ -1,0 +1,73 @@
+name: PR preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  id-token: write        # necessario per OIDC
+  contents: read
+  pull-requests: write   # per commentare la PR
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false   # mai interrompere un deploy a metà
+
+env:
+  STAGE: pr-${{ github.event.pull_request.number }}
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Installa dipendenze
+        run: |
+          npm install -g aws-cdk
+          pip install -r requirements.txt
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: cdk diff
+        run: |
+          set -o pipefail
+          cdk diff "WelfareLab-$STAGE" -c stage=$STAGE 2>&1 | tee diff.txt
+
+      - name: cdk deploy
+        run: cdk deploy "WelfareLab-$STAGE" -c stage=$STAGE --require-approval never --outputs-file outputs.json
+
+      - name: Smoke test
+        run: |
+          URL=$(jq -r ".\"WelfareLab-$STAGE\".ApiUrl" outputs.json)
+          echo "API_URL=$URL" >> "$GITHUB_ENV"
+          curl -fsS "$URL"
+
+      - name: Commenta la PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Ambiente \`$STAGE\` aggiornato"
+            echo "URL: $API_URL"
+            echo
+            echo "<details><summary>cdk diff</summary>"
+            echo
+            echo '```'
+            cat diff.txt
+            echo '```'
+            echo "</details>"
+          } > comment.md
+          gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md

@@ -1,28 +1,21 @@
 #!/usr/bin/env python3
-import os
-
 import aws_cdk as cdk
-
 from welfare_lab.welfare_lab_stack import WelfareLabStack
-
+from welfare_lab.github_oidc_stack import GithubOidcStack
 
 app = cdk.App()
-WelfareLabStack(app, "WelfareLabStack",
-    # If you don't specify 'env', this stack will be environment-agnostic.
-    # Account/Region-dependent features and context lookups will not work,
-    # but a single synthesized template can be deployed anywhere.
 
-    # Uncomment the next line to specialize this stack for the AWS Account
-    # and Region that are implied by the current CLI configuration.
 
-    #env=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
+GithubOidcStack(app, "WelfareLab-GithubOidc",
+    sub_prefix="repo:roberto-sebastiano@11598131/welfare-lab@1474520299",
+)
+# Nome dell'ambiente passato con -c stage=... (default: dev)
+stage = app.node.try_get_context("stage") or "dev"
 
-    # Uncomment the next line if you know exactly what Account and Region you
-    # want to deploy the stack to. */
+WelfareLabStack(app, f"WelfareLab-{stage}", stage=stage)
 
-    #env=cdk.Environment(account='123456789012', region='us-east-1'),
-
-    # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
-    )
+# Tag su tutte le risorse: servono per costi, pulizia e ricerca
+cdk.Tags.of(app).add("project", "welfare-lab")
+cdk.Tags.of(app).add("stage", stage)
 
 app.synth()

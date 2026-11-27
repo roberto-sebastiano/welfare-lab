@@ -36,6 +36,7 @@ class WelfareLabStack(Stack):
         )
 
         table.grant_read_write_data(fn)
-
+        environment={"TABLE_NAME": table.table_name, "STAGE": stage, "VERSION": "2"}
+        
         api = apigw.LambdaRestApi(self, "Api", handler=fn)
         CfnOutput(self, "ApiUrl", value=api.url)

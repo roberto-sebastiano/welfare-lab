@@ -1,9 +1,13 @@
 from aws_cdk import (
-    Stack, RemovalPolicy, CfnOutput, Aws,
+    Stack, RemovalPolicy, CfnOutput, Aws, Duration,
     aws_dynamodb as dynamodb,
     aws_lambda as _lambda,
     aws_apigateway as apigw,
     aws_logs as logs,
+    aws_cloudwatch as cw,
+    aws_cloudwatch_actions as cw_actions,
+    aws_sns as sns,
+    aws_sns_subscriptions as subs,
 )
 from constructs import Construct
 
@@ -53,3 +57,41 @@ class WelfareLabStack(Stack):
             deploy_options=apigw.StageOptions(tracing_enabled=True),
         )
         CfnOutput(self, "ApiUrl", value=api.url)
+
+                # --- Notifiche: topic SNS, email solo in prod ---
+        alarm_topic = sns.Topic(self, "AlarmTopic")
+        alarm_email = self.node.try_get_context("alarm_email")
+        if is_prod and alarm_email:
+            alarm_topic.add_subscription(subs.EmailSubscription(alarm_email))
+
+        # --- Alarm sui sintomi visibili all'utente ---
+        alarms = [
+            cw.Alarm(self, "LambdaErrors",
+                alarm_name=f"{self.stack_name}-lambda-errors",
+                metric=fn.metric_errors(period=Duration.minutes(1), statistic="Sum"),
+                threshold=1,
+                evaluation_periods=1,
+                comparison_operator=cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                treat_missing_data=cw.TreatMissingData.NOT_BREACHING,
+            ),
+            cw.Alarm(self, "Api5xx",
+                alarm_name=f"{self.stack_name}-api-5xx",
+                metric=api.metric_server_error(period=Duration.minutes(1), statistic="Sum"),
+                threshold=1,
+                evaluation_periods=1,
+                comparison_operator=cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                treat_missing_data=cw.TreatMissingData.NOT_BREACHING,
+            ),
+            cw.Alarm(self, "ApiLatencyP99",
+                alarm_name=f"{self.stack_name}-api-latency-p99",
+                metric=api.metric_latency(period=Duration.minutes(5), statistic="p99"),
+                threshold=1000,           # millisecondi
+                evaluation_periods=3,
+                datapoints_to_alarm=2,    # 2 periodi su 3: meno falsi allarmi
+                comparison_operator=cw.ComparisonOperator.GREATER_THAN_THRESHOLD,
+                treat_missing_data=cw.TreatMissingData.NOT_BREACHING,
+            ),
+        ]
+        for alarm in alarms:
+            alarm.add_alarm_action(cw_actions.SnsAction(alarm_topic))
+            alarm.add_ok_action(cw_actions.SnsAction(alarm_topic))

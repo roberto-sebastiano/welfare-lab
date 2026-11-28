@@ -27,6 +27,12 @@ def save_transaction() -> dict:
 @tracer.capture_lambda_handler
 @metrics.log_metrics(capture_cold_start_metric=True)
 def handler(event, context):
+    params = event.get("queryStringParameters") or {}
+    if params.get("fail") == "1":
+        logger.error("Errore simulato richiesto")
+        raise RuntimeError("Errore simulato per testare gli alarm")
+
+    item = save_transaction()
     item = save_transaction()
     logger.info("Transazione creata", extra={"pk": item["pk"]})
     metrics.add_metric(name="TransactionCreated", unit=MetricUnit.Count, value=1)

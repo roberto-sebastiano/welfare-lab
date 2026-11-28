@@ -34,4 +34,6 @@ jobs:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - name: cdk deploy
-        run: cdk deploy WelfareLab-prod -c stage=prod --require-approval never
+        env:
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
+        run: cdk deploy WelfareLab-prod -c stage=prod -c alarm_email="$ALARM_EMAIL" --require-approval never
